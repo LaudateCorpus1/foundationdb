@@ -85,7 +85,7 @@
 #include <ftw.h>
 #include <pwd.h>
 #include <sched.h>
-#ifndef __aarch64__
+#if !defined(__aarch64__) && !defined(__powerpc64__)
 #include <cpuid.h>
 #endif
 
@@ -592,7 +592,7 @@ void getDiskBytes(std::string const& directory, int64_t& free, int64_t& total) {
 	struct statvfs buf;
 	if (statvfs(directory.c_str(), &buf)) {
 		Error e = systemErrorCodeToError();
-		TraceEvent(SevError, "GetDiskBytesStatvfsError").detail("Directory", directory).GetLastError().error(e);
+		TraceEvent(SevError, "GetDiskBytesStatvfsError").error(e).detail("Directory", directory).GetLastError();
 		throw e;
 	}
 
@@ -601,7 +601,7 @@ void getDiskBytes(std::string const& directory, int64_t& free, int64_t& total) {
 	struct statfs buf;
 	if (statfs(directory.c_str(), &buf)) {
 		Error e = systemErrorCodeToError();
-		TraceEvent(SevError, "GetDiskBytesStatfsError").detail("Directory", directory).GetLastError().error(e);
+		TraceEvent(SevError, "GetDiskBytesStatfsError").error(e).detail("Directory", directory).GetLastError();
 		throw e;
 	}
 
@@ -1221,7 +1221,7 @@ void getDiskStatistics(std::string const& directory,
 	struct statfs buf;
 	if (statfs(directory.c_str(), &buf)) {
 		Error e = systemErrorCodeToError();
-		TraceEvent(SevError, "GetDiskStatisticsStatfsError").detail("Directory", directory).GetLastError().error(e);
+		TraceEvent(SevError, "GetDiskStatisticsStatfsError").error(e).detail("Directory", directory).GetLastError();
 		throw e;
 	}
 
@@ -2325,7 +2325,7 @@ bool deleteFile(std::string const& filename) {
 #error Port me!
 #endif
 	Error e = systemErrorCodeToError();
-	TraceEvent(SevError, "DeleteFile").detail("Filename", filename).GetLastError().error(e);
+	TraceEvent(SevError, "DeleteFile").error(e).detail("Filename", filename).GetLastError();
 	throw e;
 }
 
@@ -2381,10 +2381,10 @@ bool createDirectory(std::string const& directory) {
 			}
 
 			TraceEvent(SevError, "CreateDirectory")
+			    .error(e)
 			    .detail("Directory", directory)
 			    .detailf("UnixErrorCode", "%x", errno)
-			    .detail("UnixError", strerror(mkdirErrno))
-			    .error(e);
+			    .detail("UnixError", strerror(mkdirErrno));
 			throw e;
 		}
 		createdDirectory();
@@ -2471,7 +2471,7 @@ std::string abspath(std::string const& path, bool resolveLinks, bool mustExist) 
 	if (path.empty()) {
 		Error e = platform_error();
 		Severity sev = e.code() == error_code_io_error ? SevError : SevWarnAlways;
-		TraceEvent(sev, "AbsolutePathError").detail("Path", path).error(e);
+		TraceEvent(sev, "AbsolutePathError").error(e).detail("Path", path);
 		throw e;
 	}
 
@@ -2489,7 +2489,7 @@ std::string abspath(std::string const& path, bool resolveLinks, bool mustExist) 
 		if (mustExist && !fileExists(clean)) {
 			Error e = systemErrorCodeToError();
 			Severity sev = e.code() == error_code_io_error ? SevError : SevWarnAlways;
-			TraceEvent(sev, "AbsolutePathError").detail("Path", path).GetLastError().error(e);
+			TraceEvent(sev, "AbsolutePathError").error(e).detail("Path", path).GetLastError();
 			throw e;
 		}
 		return clean;
@@ -2527,7 +2527,7 @@ std::string abspath(std::string const& path, bool resolveLinks, bool mustExist) 
 		}
 		Error e = systemErrorCodeToError();
 		Severity sev = e.code() == error_code_io_error ? SevError : SevWarnAlways;
-		TraceEvent(sev, "AbsolutePathError").detail("Path", path).GetLastError().error(e);
+		TraceEvent(sev, "AbsolutePathError").error(e).detail("Path", path).GetLastError();
 		throw e;
 	}
 	return std::string(r);
@@ -3177,7 +3177,7 @@ int eraseDirectoryRecursive(std::string const& dir) {
 	   place */
 	if (error && errno != ENOENT) {
 		Error e = systemErrorCodeToError();
-		TraceEvent(SevError, "EraseDirectoryRecursiveError").detail("Directory", dir).GetLastError().error(e);
+		TraceEvent(SevError, "EraseDirectoryRecursiveError").error(e).detail("Directory", dir).GetLastError();
 		throw e;
 	}
 #else
@@ -3194,6 +3194,8 @@ bool isHwCrcSupported() {
 	return (info[2] & (1 << 20)) != 0;
 #elif defined(__aarch64__)
 	return true; /* force to use crc instructions */
+#elif defined(__powerpc64__)
+	return false; /* force not to use crc instructions */
 #elif defined(__unixish__)
 	uint32_t eax, ebx, ecx, edx, level = 1, count = 0;
 	__cpuid_count(level, count, eax, ebx, ecx, edx);
